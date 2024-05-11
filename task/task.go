@@ -21,12 +21,12 @@ type Task struct {
 	ID            uuid.UUID
 	Name          string
 	State         State
-	Image         string
+	Image         string // Docker image
 	Memory        int
 	Disk          int
-	ExposedPorts  nat.PortSet
-	PortBindings  map[string]string
-	RestartPolicy string
+	ExposedPorts  nat.PortSet       // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
+	PortBindings  map[string]string // used by Docker
+	RestartPolicy string            // will tell the system what to do when a task stops or fails unexpectedly
 	StartTime     time.Time
 	FinishTime    time.Time
 }
