@@ -20,13 +20,13 @@ func (w *Worker) CollectStats() {
 }
 
 func (w *Worker) RunTask() {
-
+	fmt.Println("Running task")
 }
 
 func (w *Worker) StartTask() {
-
+	fmt.Println("Starting task")
 }
 
 func (w *Worker) StopTask() {
-
+	fmt.Println("Stopping task")
 }
