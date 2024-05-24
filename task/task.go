@@ -28,11 +28,13 @@ const (
 
 type Task struct {
 	ID            uuid.UUID
+	ContainerID   string
 	Name          string
 	State         State
 	Image         string // Docker image
-	Memory        int
-	Disk          int
+	Cpu           float64
+	Memory        int64
+	Disk          int64
 	ExposedPorts  nat.PortSet       // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
 	PortBindings  map[string]string // used by Docker
 	RestartPolicy string            // will tell the Docker daemon what to do when a task (container) stops or fails unexpectedly | TODO make it enum?
@@ -47,6 +49,7 @@ type TaskEvent struct {
 	Task      Task
 }
 
+// Docker container config
 type Config struct {
 	Name          string // Container name
 	AttachStdin   bool
@@ -62,17 +65,42 @@ type Config struct {
 	RestartPolicy string   // https://docs.docker.com/config/containers/start-containers-automatically/#use-a-restart-policy
 }
 
+func NewConfig(t *Task) *Config {
+	return &Config{
+		Name:          t.Name,
+		ExposedPorts:  t.ExposedPorts,
+		Image:         t.Image,
+		Cpu:           t.Cpu,
+		Memory:        t.Memory,
+		Disk:          t.Disk,
+		RestartPolicy: t.RestartPolicy,
+	}
+}
+
 // TODO maybe refactor struct :/
 type DockerResult struct {
 	Error       error
 	Action      string
-	ContainerId string
+	ContainerID string
 	Result      string
 }
 
 type Docker struct {
 	Client *client.Client
 	Config Config
+}
+
+func NewDocker(c *Config) *Docker {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		log.Printf("Could not create docker client: %v\n", err)
+		return nil
+	}
+
+	return &Docker{
+		Client: cli,
+		Config: *c,
+	}
 }
 
 func (d *Docker) Run() DockerResult {
@@ -128,7 +156,7 @@ func (d *Docker) Run() DockerResult {
 	}
 	// defer out.Close() // TODO is it required
 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-	return DockerResult{ContainerId: resp.ID, Action: "start", Result: "success", Error: nil}
+	return DockerResult{ContainerID: resp.ID, Action: "start", Result: "success", Error: nil}
 }
 
 func (d *Docker) Stop(id string) DockerResult {
