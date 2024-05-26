@@ -40,7 +40,7 @@ func runTasks(w *worker.Worker) {
 				log.Printf("Could not run task: %v\n", result.Error)
 			}
 		} else {
-			log.Printf("No tasks to process currently,\n")
+			log.Printf("No tasks to process currently.\n")
 		}
 
 		log.Println("Sleeping for 10s.")
