@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/golang-collections/collections/queue"
@@ -11,39 +14,36 @@ import (
 )
 
 func main() {
-	db := make(map[uuid.UUID]*task.Task)
+	host := os.Getenv("TESSERACT_HOST")
+	port, _ := strconv.Atoi(os.Getenv("TESSERACT_PORT"))
 
-	t := task.Task{
-		ID:    uuid.New(),
-		Name:  "test-container-1",
-		State: task.Scheduled,
-		Image: "strm/helloworld-http",
-	}
-
+	fmt.Printf("Starting tesseract worker.")
 	w := worker.Worker{
-		Name:  "worker-1",
 		Queue: *queue.New(),
-		Db:    db,
+		Db:    make(map[uuid.UUID]*task.Task),
+	}
+	api := worker.Api{
+		Address: host,
+		Port:    port,
+		Worker:  &w,
 	}
 
-	fmt.Println("Starting task")
-	w.AddTask(t)
-	result := w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
+	go runTasks(&w)
+	api.Start()
+}
+
+func runTasks(w *worker.Worker) {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.RunTask()
+			if result.Error != nil {
+				log.Printf("Could not run task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("No tasks to process currently,\n")
+		}
+
+		log.Println("Sleeping for 10s.")
+		time.Sleep(10 * time.Second)
 	}
-
-	t.ContainerID = result.ContainerID
-	fmt.Printf("Task %s is running in container %s\n", t.ID, t.ContainerID)
-
-	time.Sleep(time.Second * 10)
-
-	fmt.Printf("Stopping task %s\n", t.ID)
-	t.State = task.Completed
-	w.AddTask(t)
-	result = w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
-	}
-
 }
