@@ -17,7 +17,7 @@ func main() {
 	host := os.Getenv("TESSERACT_HOST")
 	port, _ := strconv.Atoi(os.Getenv("TESSERACT_PORT"))
 
-	fmt.Printf("Starting tesseract worker.")
+	fmt.Println("Starting tesseract worker.")
 	w := worker.Worker{
 		Queue: *queue.New(),
 		Db:    make(map[uuid.UUID]*task.Task),
