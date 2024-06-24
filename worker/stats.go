@@ -1,0 +1,111 @@
+package worker
+
+import (
+	"log"
+
+	linux "github.com/c9s/goprocinfo/linux"
+)
+
+type Stats struct {
+	MemStats  *linux.MemInfo
+	DiskStats *linux.Disk
+	CpuStats  *linux.CPUStat
+	LoadStats *linux.LoadAvg
+}
+
+func GetStats() *Stats {
+	return &Stats{
+		MemStats:  GetMemoryInfo(),
+		DiskStats: GetDiskInfo(),
+		CpuStats:  GetCpuStats(),
+		LoadStats: GetLoadAvg(),
+	}
+}
+
+// ===================== Memory =====================
+
+func GetMemoryInfo() *linux.MemInfo {
+	memStats, err := linux.ReadMemInfo("/proc/meminfo")
+	if err != nil {
+		log.Printf("Could not read meminfo from /proc/meminfo\n")
+		return &linux.MemInfo{}
+	}
+
+	return memStats
+}
+
+func (s *Stats) MemAvailableKb() uint64 {
+	return s.MemStats.MemAvailable
+}
+
+func (s *Stats) MemUsedKb() uint64 {
+	return s.MemStats.MemTotal - s.MemStats.MemAvailable
+}
+
+func (s *Stats) MemUsedPercent() uint64 {
+	return s.MemStats.MemAvailable / s.MemStats.MemTotal
+}
+
+// ===================== Disk =====================
+
+func GetDiskInfo() *linux.Disk {
+	diskStats, err := linux.ReadDisk("/")
+	if err != nil {
+		log.Printf("Could not read diskinfo from /\n")
+		return &linux.Disk{}
+	}
+
+	return diskStats
+}
+
+func (s *Stats) DiskTotal() uint64 {
+	return s.DiskStats.All
+}
+
+func (s *Stats) DiskFree() uint64 {
+	return s.DiskStats.Free
+}
+
+func (s *Stats) DiskUsed() uint64 {
+	return s.DiskStats.Used
+}
+
+// ===================== CPU =====================
+
+func GetCpuStats() *linux.CPUStat {
+	stats, err := linux.ReadStat("/proc/stat")
+	if err != nil {
+		log.Printf("Could not read cpuinfo from /proc/stat\n")
+		return &linux.CPUStat{}
+	}
+
+	return &stats.CPUStatAll
+}
+
+// src: https://stackoverflow.com/questions/23367857/accurate-calculation-of-cpu-usage-given-in-percentage-in-linux
+// 1. Sum the values for the idle states
+// 2. Sum the values for the non-idle states
+// 3. Sum the total of idle and non-idle states
+// 4. Subtract the idle from the total and divide the result by the total
+func (s *Stats) CpuUsage() float64 {
+	idle := s.CpuStats.Idle + s.CpuStats.IOWait
+	nonIdle := s.CpuStats.User + s.CpuStats.Nice + s.CpuStats.System + s.CpuStats.IRQ +
+		s.CpuStats.SoftIRQ + s.CpuStats.Steal
+
+	total := idle + nonIdle
+	if total == 0 {
+		return 0.00
+	}
+
+	return (float64(total) - float64(idle)) / float64(total)
+}
+
+func GetLoadAvg() *linux.LoadAvg {
+	loadavg, err := linux.ReadLoadAvg("/proc/loadavg")
+	if err != nil {
+		log.Printf("Could not read loadavg from /proc/loadavg\n")
+		return &linux.LoadAvg{}
+	}
+
+	return loadavg
+}
