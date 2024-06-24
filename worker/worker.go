@@ -15,6 +15,7 @@ type Worker struct {
 	Name      string
 	Queue     queue.Queue // TODO replace with generic queue impl
 	Db        map[uuid.UUID]*task.Task
+	Stats     *Stats
 	TaskCount int
 }
 
@@ -31,7 +32,13 @@ func (w *Worker) AddTask(t task.Task) {
 }
 
 func (w *Worker) CollectStats() {
-	fmt.Println("Collecting stats")
+	for {
+		log.Println("Collecting stats")
+		w.Stats = GetStats()
+		w.Stats.TaskCount = w.TaskCount
+
+		time.Sleep(15 * time.Second)
+	}
 }
 
 func (w *Worker) RunTask() task.DockerResult {

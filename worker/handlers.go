@@ -66,3 +66,9 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Added task [%v] to stop container [%v]\n", taskToStop.ID, taskToStop.ContainerID)
 	w.WriteHeader(204)
 }
+
+func (a *Api) GetStatsHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	json.NewEncoder(w).Encode(a.Worker.Stats)
+}
