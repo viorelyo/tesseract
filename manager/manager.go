@@ -23,6 +23,27 @@ type Manager struct {
 	TaskWorkerMap map[uuid.UUID]string
 }
 
+func New(workers []string) *Manager {
+	taskDb := make(map[uuid.UUID]*task.Task)
+	evendDb := make(map[uuid.UUID]*task.TaskEvent)
+	workerTaskMap := make(map[string][]uuid.UUID)
+	taskWorkerMap := make(map[uuid.UUID]string)
+
+	for w := range workers {
+		workerTaskMap[workers[w]] = []uuid.UUID{}
+	}
+
+	return &Manager{
+		Workers:       workers,
+		LastWorker:    0,
+		Pending:       *queue.New(),
+		TaskDb:        taskDb,
+		EventDb:       evendDb,
+		WorkerTaskMap: workerTaskMap,
+		TaskWorkerMap: taskWorkerMap,
+	}
+}
+
 // Round-robin naive scheduling
 func (m *Manager) SelectWorker() string {
 	var newWorker int
@@ -38,7 +59,45 @@ func (m *Manager) SelectWorker() string {
 }
 
 func (m *Manager) UpdateTasks() {
-	fmt.Println("Updating tasks")
+	for _, w := range m.Workers {
+		log.Printf("Checking worker [%v] for task updates\n", w)
+		url := fmt.Sprintf("http://%s/tasks", w)
+		resp, err := http.Get(url)
+		if err != nil {
+			log.Printf("Could not connect to worker [%v]: %v\n", w, err)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Could not send request: %v\n", err)
+			continue
+		}
+
+		d := json.NewDecoder(resp.Body)
+		var tasks []*task.Task
+		err = d.Decode(&tasks)
+		if err != nil {
+			log.Printf("Could not unmarshall tasks: %s\n", err.Error())
+		}
+
+		for _, t := range tasks {
+			log.Printf("Attempting to update task [%v]\n", t.ID)
+
+			_, ok := m.TaskDb[t.ID]
+			if !ok {
+				log.Printf("Task [%v] was not found\n", t.ID)
+				continue
+			}
+
+			if m.TaskDb[t.ID].State != t.State {
+				m.TaskDb[t.ID].State = t.State
+			}
+
+			m.TaskDb[t.ID].ContainerID = t.ContainerID
+			m.TaskDb[t.ID].StartTime = t.StartTime
+			m.TaskDb[t.ID].FinishTime = t.FinishTime
+		}
+	}
 }
 
 func (m *Manager) SendWork() {
@@ -94,4 +153,8 @@ func (m *Manager) SendWork() {
 	} else {
 		log.Println("No work in the queue")
 	}
+}
+
+func (m *Manager) AddTaskEvent(te task.TaskEvent) {
+	m.Pending.Enqueue(te)
 }
