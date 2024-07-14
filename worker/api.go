@@ -38,6 +38,6 @@ func (a *Api) Start() {
 	a.initRouter()
 	err := http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port), a.Router)
 	if err != nil {
-		log.Printf("Could not create the http.lister: %v\n", err)
+		log.Printf("[WorkerAPI] Could not create the http.lister: %v\n", err)
 	}
 }

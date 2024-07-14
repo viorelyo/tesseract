@@ -18,8 +18,8 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, req *http.Request) {
 	taskEvent := task.TaskEvent{}
 	err := d.Decode(&taskEvent)
 	if err != nil {
-		msg := fmt.Sprintf("Could not decode request body: %v\n", err)
-		log.Printf(msg)
+		msg := fmt.Sprintf("[WorkerAPI] Could not decode request body: %v\n", err)
+		log.Print(msg)
 
 		w.WriteHeader(400)
 		e := ErrResponse{
@@ -31,7 +31,7 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	a.Worker.AddTask(taskEvent.Task)
-	log.Printf("Added task [%v]\n", taskEvent.Task.ID)
+	log.Printf("[WorkerAPI] Added task [%v]\n", taskEvent.Task.ID)
 	w.WriteHeader(201)
 	json.NewEncoder(w).Encode(taskEvent.Task)
 }
@@ -45,7 +45,7 @@ func (a *Api) GetTasksHandler(w http.ResponseWriter, req *http.Request) {
 func (a *Api) StopTaskHandler(w http.ResponseWriter, req *http.Request) {
 	taskID := chi.URLParam(req, "taskID")
 	if taskID == "" {
-		log.Printf("No taskID passed in reques.\n")
+		log.Printf("[WorkerAPI] No taskID passed in reques.\n")
 		w.WriteHeader(400)
 		return
 	}
@@ -53,7 +53,7 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, req *http.Request) {
 	tID, _ := uuid.Parse(taskID)
 	_, ok := a.Worker.Db[tID]
 	if !ok {
-		log.Printf("No task with ID [%v] found", tID)
+		log.Printf("[WorkerAPI] No task with ID [%v] found", tID)
 		w.WriteHeader(404)
 		return
 	}
@@ -63,7 +63,7 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, req *http.Request) {
 	taskCopy.State = task.Completed
 	a.Worker.AddTask(taskCopy)
 
-	log.Printf("Added task [%v] to stop container [%v]\n", taskToStop.ID, taskToStop.ContainerID)
+	log.Printf("[WorkerAPI] Added task [%v] to stop container [%v]\n", taskToStop.ID, taskToStop.ContainerID)
 	w.WriteHeader(204)
 }
 

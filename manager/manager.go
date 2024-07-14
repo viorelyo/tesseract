@@ -60,16 +60,16 @@ func (m *Manager) SelectWorker() string {
 
 func (m *Manager) UpdateTasks() {
 	for _, w := range m.Workers {
-		log.Printf("Checking worker [%v] for task updates\n", w)
+		log.Printf("[Manager] Checking worker [%v] for task updates\n", w)
 		url := fmt.Sprintf("http://%s/tasks", w)
 		resp, err := http.Get(url)
 		if err != nil {
-			log.Printf("Could not connect to worker [%v]: %v\n", w, err)
+			log.Printf("[Manager] Could not connect to worker [%v]: %v\n", w, err)
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Could not send request: %v\n", err)
+			log.Printf("[Manager] Could not send request: %v\n", err)
 			continue
 		}
 
@@ -77,15 +77,15 @@ func (m *Manager) UpdateTasks() {
 		var tasks []*task.Task
 		err = d.Decode(&tasks)
 		if err != nil {
-			log.Printf("Could not unmarshall tasks: %s\n", err.Error())
+			log.Printf("[Manager] Could not unmarshall tasks: %s\n", err.Error())
 		}
 
 		for _, t := range tasks {
-			log.Printf("Attempting to update task [%v]\n", t.ID)
+			log.Printf("[Manager] Attempting to update task [%v]\n", t.ID)
 
 			_, ok := m.TaskDb[t.ID]
 			if !ok {
-				log.Printf("Task [%v] was not found\n", t.ID)
+				log.Printf("[Manager] Task [%v] was not found\n", t.ID)
 				continue
 			}
 
@@ -108,7 +108,7 @@ func (m *Manager) SendWork() {
 		te := e.(task.TaskEvent)
 		t := te.Task
 
-		log.Printf("Pulled %v off pending queue\n", t)
+		log.Printf("[Manager] Pulled %v off pending queue\n", t)
 
 		m.EventDb[te.ID] = &te
 		m.WorkerTaskMap[w] = append(m.WorkerTaskMap[w], te.Task.ID)
@@ -119,14 +119,14 @@ func (m *Manager) SendWork() {
 
 		data, err := json.Marshal(te)
 		if err != nil {
-			log.Printf("Could not marshal task object: %v\n", t)
+			log.Printf("[Manager] Could not marshal task object: %v\n", t)
 		}
 
 		// todo unindent
 		url := fmt.Sprintf("http://%s/tasks", w)
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 		if err != nil {
-			log.Printf("Could not connect to [%v]: %v\n", w, err)
+			log.Printf("[Manager] Could not connect to [%v]: %v\n", w, err)
 			m.Pending.Enqueue(te)
 			return
 		}
@@ -136,22 +136,22 @@ func (m *Manager) SendWork() {
 			e := worker.ErrResponse{}
 			err := d.Decode(&e)
 			if err != nil {
-				fmt.Printf("Could not decode response: %s\n", err.Error())
+				log.Printf("[Manager] Could not decode response: %s\n", err.Error())
 				return
 			}
-			log.Printf("Response error (%d): %s", e.HTTPStatusCode, e.Message)
+			log.Printf("[Manager] Response error (%d): %s", e.HTTPStatusCode, e.Message)
 			return
 		}
 
 		t = task.Task{}
 		err = d.Decode(&t)
 		if err != nil {
-			fmt.Printf("Could not decode response: %s\n", err.Error())
+			log.Printf("[Manager] Could not decode response: %s\n", err.Error())
 			return
 		}
-		log.Printf("Task sent: %v\n", t)
+		log.Printf("[Manager] Task sent: %v\n", t)
 	} else {
-		log.Println("No work in the queue")
+		log.Println("[Manager] No work in the queue")
 	}
 }
 
