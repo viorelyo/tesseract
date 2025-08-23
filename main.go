@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -15,72 +13,67 @@ import (
 )
 
 func main() {
-	host := os.Getenv("TESSERACT_HOST")
-	port, _ := strconv.Atoi(os.Getenv("TESSERACT_PORT"))
+	workerHost := os.Getenv("TESSERACT_WORKER_HOST")
+	workerPort, _ := strconv.Atoi(os.Getenv("TESSERACT_WORKER_PORT"))
 
+	mgrHost := os.Getenv("TESSERACT_MANAGER_HOST")
+	mgrPort, _ := strconv.Atoi(os.Getenv("TESSERACT_MANAGER_PORT"))
+
+	// #region WorkerApi
 	fmt.Println("Starting tesseract worker.")
 	w := worker.Worker{
 		Queue: *queue.New(),
 		Db:    make(map[uuid.UUID]*task.Task),
 	}
-	api := worker.Api{
-		Address: host,
-		Port:    port,
+	workerApi := worker.Api{
+		Address: workerHost,
+		Port:    workerPort,
 		Worker:  &w,
 	}
 
-	go runTasks(&w)
+	go w.RunTasks()
 	go w.CollectStats()
-	go api.Start()
-
-	// #region Test for manually added mock tasks
-	workers := []string{fmt.Sprintf("%s:%d", host, port)}
-	m := manager.New(workers)
-
-	for i := 0; i < 3; i++ {
-		t := task.Task{
-			ID:    uuid.New(),
-			Name:  fmt.Sprintf("test-container-%d", i),
-			State: task.Scheduled,
-			Image: "strm/helloworld-http",
-		}
-		te := task.TaskEvent{
-			ID:    uuid.New(),
-			State: task.Running,
-			Task:  t,
-		}
-		m.AddTaskEvent(te)
-		m.SendWork()
-	}
+	go workerApi.Start()
 	// #endregion
 
-	go func() {
-		for {
-			m.UpdateTasks()
-			time.Sleep(15 * time.Second)
-		}
-	}()
+	// #region ManagerApi
+	fmt.Println("Starting tesseract manager.")
+	workers := []string{fmt.Sprintf("%s:%d", workerHost, workerPort)}
 
-	for {
-		for _, t := range m.TaskDb {
-			fmt.Printf("Manager Task: id: %s, state: %d\n", t.ID, t.State)
-			time.Sleep(15 * time.Second)
-		}
+	mgr := manager.New(workers)
+	mgrApi := manager.Api{
+		Address: mgrHost,
+		Port:    mgrPort,
+		Manager: mgr,
 	}
-}
 
-func runTasks(w *worker.Worker) {
-	for {
-		if w.Queue.Len() != 0 {
-			result := w.RunTask()
-			if result.Error != nil {
-				log.Printf("Could not run task: %v\n", result.Error)
-			}
-		} else {
-			log.Printf("No tasks to process currently.\n")
-		}
+	go mgr.ProcessTasks()
+	go mgr.UpdateTasks()
+	mgrApi.Start()
+	// #endregion
 
-		log.Println("Sleeping for 10s.")
-		time.Sleep(10 * time.Second)
-	}
+	// #region Test for manually added mock tasks
+	// for i := 0; i < 3; i++ {
+	// 	t := task.Task{
+	// 		ID:    uuid.New(),
+	// 		Name:  fmt.Sprintf("test-container-%d", i),
+	// 		State: task.Scheduled,
+	// 		Image: "strm/helloworld-http",
+	// 	}
+	// 	te := task.TaskEvent{
+	// 		ID:    uuid.New(),
+	// 		State: task.Running,
+	// 		Task:  t,
+	// 	}
+	// 	mgr.AddTaskEvent(te)
+	// 	mgr.SendWork()
+	// }
+
+	// for {
+	// 	for _, t := range mgr.TaskDb {
+	// 		fmt.Printf("Manager Task: id: %s, state: %d\n", t.ID, t.State)
+	// 		time.Sleep(15 * time.Second)
+	// 	}
+	// }
+	// #endregion
 }

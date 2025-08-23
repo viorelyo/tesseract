@@ -1,7 +1,7 @@
 # Frequent commands
 
 ## tesseract
-`TESSERACT_HOST=localhost TESSERACT_PORT=5555 go run main.go`
+`TESSERACT_WORKER_HOST=localhost TESSERACT_WORKER_PORT=5555 TESSERACT_MANAGER_HOST=localhost TESSERACT_MANAGER_PORT=5556 go run main.go`
 
 ### tesseract.worker
 `curl http://localhost:5555/tasks | jq .`

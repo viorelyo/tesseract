@@ -41,7 +41,7 @@ func (w *Worker) CollectStats() {
 	}
 }
 
-func (w *Worker) RunTask() task.DockerResult {
+func (w *Worker) runTask() task.DockerResult {
 	t := w.Queue.Dequeue()
 	if t == nil {
 		log.Println("[Worker] No tasks in the queue")
@@ -109,4 +109,20 @@ func (w *Worker) StopTask(t task.Task) task.DockerResult {
 
 	log.Printf("[Worker] Stopped and removed container [%s] for task %v\n", t.ContainerID, t.ID)
 	return result
+}
+
+func (w *Worker) RunTasks() {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.runTask()
+			if result.Error != nil {
+				log.Printf("[Worker] Could not run task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("[Worker] No tasks to process currently\n")
+		}
+
+		log.Println("[Worker] Sleeping for 10s while running tasks")
+		time.Sleep(10 * time.Second)
+	}
 }
