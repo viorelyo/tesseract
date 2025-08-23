@@ -33,7 +33,7 @@ func (w *Worker) AddTask(t task.Task) {
 
 func (w *Worker) CollectStats() {
 	for {
-		log.Println("Collecting stats")
+		log.Println("[Worker] Collecting stats")
 		w.Stats = GetStats()
 		w.Stats.TaskCount = w.TaskCount
 
@@ -41,10 +41,10 @@ func (w *Worker) CollectStats() {
 	}
 }
 
-func (w *Worker) RunTask() task.DockerResult {
+func (w *Worker) runTask() task.DockerResult {
 	t := w.Queue.Dequeue()
 	if t == nil {
-		log.Println("No tasks in the queue")
+		log.Println("[Worker] No tasks in the queue")
 		return task.DockerResult{Error: nil}
 	}
 
@@ -67,7 +67,7 @@ func (w *Worker) RunTask() task.DockerResult {
 			// fixme panic here?
 		}
 	} else {
-		err := fmt.Errorf("Invalid transition from %v to %v",
+		err := fmt.Errorf("invalid transition from %v to %v",
 			taskPersisted.State, taskQueued.State)
 		result.Error = err
 	}
@@ -81,7 +81,7 @@ func (w *Worker) StartTask(t task.Task) task.DockerResult {
 	docker := task.NewDocker(config)
 	result := docker.Run()
 	if result.Error != nil {
-		log.Printf("Could not run task %v: %v\n", t.ID, result.Error)
+		log.Printf("[Worker] Could not run task %v: %v\n", t.ID, result.Error)
 
 		t.State = task.Failed
 		w.Db[t.ID] = &t
@@ -100,13 +100,29 @@ func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	docker := task.NewDocker(config)
 	result := docker.Stop(t.ContainerID)
 	if result.Error != nil {
-		log.Printf("Could not stop container [%s]: %v\n", t.ContainerID, result.Error)
+		log.Printf("[Worker] Could not stop container [%s]: %v\n", t.ContainerID, result.Error)
 	}
 
 	t.FinishTime = time.Now().UTC()
 	t.State = task.Completed
 	w.Db[t.ID] = &t
 
-	log.Printf("Stopped and removed container [%s] for task %v\n", t.ContainerID, t.ID)
+	log.Printf("[Worker] Stopped and removed container [%s] for task %v\n", t.ContainerID, t.ID)
 	return result
+}
+
+func (w *Worker) RunTasks() {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.runTask()
+			if result.Error != nil {
+				log.Printf("[Worker] Could not run task: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("[Worker] No tasks to process currently\n")
+		}
+
+		log.Println("[Worker] Sleeping for 10s while running tasks")
+		time.Sleep(10 * time.Second)
+	}
 }

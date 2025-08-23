@@ -1,4 +1,4 @@
-package worker
+package manager
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ type ErrResponse struct {
 type Api struct {
 	Address string
 	Port    int
-	Worker  *Worker
+	Manager *Manager
 	Router  *chi.Mux
 }
 
@@ -29,15 +29,12 @@ func (a *Api) initRouter() {
 			r.Delete("/", a.StopTaskHandler)
 		})
 	})
-	a.Router.Route("/stats", func(r chi.Router) {
-		r.Get("/", a.GetStatsHandler)
-	})
 }
 
 func (a *Api) Start() {
 	a.initRouter()
 	err := http.ListenAndServe(fmt.Sprintf("%s:%d", a.Address, a.Port), a.Router)
 	if err != nil {
-		log.Printf("[WorkerAPI] Could not create the http.listener: %v\n", err)
+		log.Printf("[ManagerAPI] Could not create the http.listener: %v\n", err)
 	}
 }

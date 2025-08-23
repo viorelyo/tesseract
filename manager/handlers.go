@@ -1,10 +1,11 @@
-package worker
+package manager
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, req *http.Request) {
 	taskEvent := task.TaskEvent{}
 	err := d.Decode(&taskEvent)
 	if err != nil {
-		msg := fmt.Sprintf("[WorkerAPI] Could not decode request body: %v\n", err)
+		msg := fmt.Sprintf("[ManagerAPI] Could not decode request body: %v\n", err)
 		log.Print(msg)
 
 		w.WriteHeader(400)
@@ -30,8 +31,8 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	a.Worker.AddTask(taskEvent.Task)
-	log.Printf("[WorkerAPI] Added task [%v]\n", taskEvent.Task.ID)
+	a.Manager.AddTaskEvent(taskEvent)
+	log.Printf("[ManagerAPI] Added taskEvent [%v]\n", taskEvent.Task.ID)
 	w.WriteHeader(201)
 	json.NewEncoder(w).Encode(taskEvent.Task)
 }
@@ -39,36 +40,36 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, req *http.Request) {
 func (a *Api) GetTasksHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(a.Worker.GetTasks())
+	json.NewEncoder(w).Encode(a.Manager.GetTasks())
 }
 
 func (a *Api) StopTaskHandler(w http.ResponseWriter, req *http.Request) {
 	taskID := chi.URLParam(req, "taskID")
 	if taskID == "" {
-		log.Printf("[WorkerAPI] No taskID passed in request\n")
+		log.Printf("[ManagerAPI] No taskID passed in request\n")
 		w.WriteHeader(400)
 		return
 	}
 
 	tID, _ := uuid.Parse(taskID)
-	_, ok := a.Worker.Db[tID]
+	taskToStop, ok := a.Manager.TaskDb[tID]
 	if !ok {
-		log.Printf("[WorkerAPI] No task with ID [%v] found\n", tID)
+		log.Printf("[ManagerAPI] No task with ID [%v] found\n", tID)
 		w.WriteHeader(404)
 		return
 	}
 
-	taskToStop := a.Worker.Db[tID]
+	taskEvent := task.TaskEvent{
+		ID:        uuid.New(),
+		State:     task.Completed,
+		Timestamp: time.Now(),
+	}
+
 	taskCopy := *taskToStop
 	taskCopy.State = task.Completed
-	a.Worker.AddTask(taskCopy)
+	taskEvent.Task = taskCopy
+	a.Manager.AddTaskEvent(taskEvent)
 
-	log.Printf("[WorkerAPI] Added task [%v] to stop container [%v]\n", taskToStop.ID, taskToStop.ContainerID)
+	log.Printf("[ManagerAPI] Added task [%v] to stop container [%v]\n", taskToStop.ID, taskToStop.ContainerID)
 	w.WriteHeader(204)
-}
-
-func (a *Api) GetStatsHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(a.Worker.Stats)
 }
