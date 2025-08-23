@@ -33,6 +33,7 @@ func main() {
 	go w.CollectStats()
 	go api.Start()
 
+	// #region Test for manually added mock tasks
 	workers := []string{fmt.Sprintf("%s:%d", host, port)}
 	m := manager.New(workers)
 
@@ -51,6 +52,7 @@ func main() {
 		m.AddTaskEvent(te)
 		m.SendWork()
 	}
+	// #endregion
 
 	go func() {
 		for {

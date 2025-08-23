@@ -10,3 +10,4 @@
 ## Docker
 `docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"`
 `docker inspect -f '{{.State.Pid}}' ContainerID`
+`docker rm -f %id%` : stop and remove the container with %id%
