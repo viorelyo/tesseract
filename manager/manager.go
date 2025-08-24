@@ -3,11 +3,14 @@ package manager
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 	"github.com/viorelyo/tesseract/task"
@@ -185,4 +188,112 @@ func (m *Manager) GetTasks() []*task.Task {
 		tasks = append(tasks, t)
 	}
 	return tasks
+}
+
+func (m *Manager) checkTaskHealth(t task.Task) error {
+	// todo docs
+
+	getHostPort := func(ports nat.PortMap) *string {
+		for k, _ := range ports {
+			return &ports[k][0].HostPort
+		}
+		return nil
+	}
+
+	worker := m.TaskWorkerMap[t.ID]
+	workerSchema := strings.Split(worker, ":")
+	hostPort := getHostPort(t.HostPorts)
+	healthUrl := fmt.Sprintf("http://%s:%s%s", workerSchema[0], *hostPort, t.HealthCheckUrl)
+
+	log.Printf("[Manager] Checking health for task: %s - [%s]\n", t.ID, healthUrl)
+	resp, err := http.Get(healthUrl)
+	if err != nil {
+		msg := fmt.Sprintf("[Manager] Error connecting to health check url [%s]", healthUrl)
+		log.Println(msg)
+		return errors.New(msg)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		msg := fmt.Sprintf("[Manager] Error health check for task: %s - [%d]", t.ID, resp.StatusCode)
+		log.Println(msg)
+		return errors.New(msg)
+	}
+
+	return nil
+}
+
+func (m *Manager) performHealthChecks() {
+	// todo docs
+
+	for _, t := range m.GetTasks() {
+		if t.State == task.Running && t.RestartCount < 3 {
+			err := m.checkTaskHealth(*t)
+			if err != nil {
+				if t.RestartCount < 3 {
+					m.restartTask(t)
+				}
+			}
+		} else if t.State == task.Failed && t.RestartCount < 3 {
+			m.restartTask(t)
+		}
+	}
+}
+
+func (m *Manager) restartTask(t *task.Task) {
+	//todo docs
+
+	w := m.TaskWorkerMap[t.ID]
+	t.State = task.Scheduled
+	t.RestartCount++
+	m.TaskDb[t.ID] = t
+
+	te := task.TaskEvent{
+		ID:        uuid.New(),
+		State:     task.Running,
+		Timestamp: time.Now(),
+		Task:      *t,
+	}
+	data, err := json.Marshal(te)
+	if err != nil {
+		log.Printf("[Manager] Could not marshal task object: %v\n", t)
+		return
+	}
+
+	// todo duplicated code
+	url := fmt.Sprintf("http://%s/tasks", w)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		log.Printf("[Manager] Could not connect to [%v]: %v\n", w, err)
+		m.Pending.Enqueue(te)
+		return
+	}
+
+	d := json.NewDecoder(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		e := worker.ErrResponse{}
+		err := d.Decode(&e)
+		if err != nil {
+			log.Printf("[Manager] Could not decode response: %s\n", err.Error())
+			return
+		}
+		log.Printf("[Manager] Response error (%d): %s", e.HTTPStatusCode, e.Message)
+		return
+	}
+
+	newTask := task.Task{}
+	err = d.Decode(&newTask)
+	if err != nil {
+		log.Printf("[Manager] Could not decode response: %s\n", err.Error())
+		return
+	}
+}
+
+func (m *Manager) PerformHealthChecks() {
+	for {
+		log.Println("[Manager] Performing task health checks")
+		m.performHealthChecks()
+		log.Println("[Manager] Performed task health checks")
+		log.Println("[Manager] Sleeping for 60s while performing task health checks")
+		time.Sleep(60 * time.Second)
+	}
 }

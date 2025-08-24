@@ -28,20 +28,22 @@ const (
 )
 
 type Task struct {
-	ID            uuid.UUID
-	ContainerID   string
-	Name          string
-	State         State
-	Image         string // Docker image
-	Cpu           float64
-	Memory        int64
-	Disk          int64
-	ExposedPorts  nat.PortSet // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
-	HostPorts     nat.PortMap
-	PortBindings  map[string]string // used by Docker
-	RestartPolicy string            // will tell the Docker daemon what to do when a task (container) stops or fails unexpectedly | TODO make it enum?
-	StartTime     time.Time
-	FinishTime    time.Time
+	ID             uuid.UUID
+	ContainerID    string
+	Name           string
+	State          State
+	Image          string // Docker image
+	HealthCheckUrl string
+	RestartCount   int
+	Cpu            float64
+	Memory         int64
+	Disk           int64
+	ExposedPorts   nat.PortSet // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
+	HostPorts      nat.PortMap
+	PortBindings   map[string]string // used by Docker
+	RestartPolicy  string            // will tell the Docker daemon what to do when a task (container) stops or fails unexpectedly | TODO make it enum?
+	StartTime      time.Time
+	FinishTime     time.Time
 }
 
 type TaskEvent struct {
