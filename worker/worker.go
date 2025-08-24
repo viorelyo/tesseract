@@ -111,6 +111,51 @@ func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	return result
 }
 
+func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
+	config := task.NewConfig(&t)
+	d := task.NewDocker(config)
+	return d.Inspect(t.ContainerID)
+}
+
+func (w *Worker) updateTasks() {
+	// todo add docs
+
+	updateFailedTask := func(id uuid.UUID) {
+		w.Db[id].State = task.Failed
+	}
+
+	for id, t := range w.Db {
+		if t.State == task.Running {
+			resp := w.InspectTask(*t)
+			if resp.Error != nil {
+				log.Printf("[Worker] Error: %v\n", resp.Error)
+			}
+
+			if resp.ContainerData == nil {
+				log.Printf("[Worker] ContainerData not fetched for running task: %s\n", id)
+				updateFailedTask(id)
+			}
+
+			if resp.ContainerData.State.Status == "exited" {
+				log.Printf("[Worker] ContainerData for task: %s in non-running state: %s\n", id, resp.ContainerData.State.Status)
+				updateFailedTask(id)
+			}
+
+			w.Db[id].HostPorts = resp.ContainerData.NetworkSettings.NetworkSettingsBase.Ports
+		}
+	}
+}
+
+func (w *Worker) UpdateTasks() {
+	for {
+		log.Println("[Worker] Checking status of tasks")
+		w.updateTasks()
+		log.Println("[Worker] Task statuses updated")
+		log.Println("[Worker] Sleeping for 15s while updating tasks")
+		time.Sleep(15 * time.Second)
+	}
+}
+
 func (w *Worker) RunTasks() {
 	for {
 		if w.Queue.Len() != 0 {

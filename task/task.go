@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -35,7 +36,8 @@ type Task struct {
 	Cpu           float64
 	Memory        int64
 	Disk          int64
-	ExposedPorts  nat.PortSet       // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
+	ExposedPorts  nat.PortSet // used by Docker to ensure the machine allocates the proper network ports for the task and that it is available on the network
+	HostPorts     nat.PortMap
 	PortBindings  map[string]string // used by Docker
 	RestartPolicy string            // will tell the Docker daemon what to do when a task (container) stops or fails unexpectedly | TODO make it enum?
 	StartTime     time.Time
@@ -85,6 +87,11 @@ type DockerResult struct {
 	Result      string
 }
 
+type DockerInspectResponse struct {
+	Error         error
+	ContainerData *types.ContainerJSON
+}
+
 type Docker struct {
 	Client *client.Client
 	Config Config
@@ -93,7 +100,7 @@ type Docker struct {
 func NewDocker(c *Config) *Docker {
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		log.Printf("Could not create docker client: %v\n", err)
+		log.Printf("[Docker] Could not create docker client: %v\n", err)
 		return nil
 	}
 
@@ -107,7 +114,7 @@ func (d *Docker) Run() DockerResult {
 	ctx := context.Background()
 	reader, err := d.Client.ImagePull(ctx, d.Config.Image, image.PullOptions{})
 	if err != nil {
-		log.Printf("Could not pull image [%s]: %v\n", d.Config.Image, err)
+		log.Printf("[Docker] Could not pull image [%s]: %v\n", d.Config.Image, err)
 		return DockerResult{Error: err}
 	}
 	defer reader.Close()
@@ -137,13 +144,13 @@ func (d *Docker) Run() DockerResult {
 
 	resp, err := d.Client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, nil, d.Config.Name)
 	if err != nil {
-		log.Printf("Could not create container with image [%s]: %v\n", d.Config.Image, err)
+		log.Printf("[Docker] Could not create container with image [%s]: %v\n", d.Config.Image, err)
 		return DockerResult{Error: err}
 	}
 
 	err = d.Client.ContainerStart(ctx, resp.ID, container.StartOptions{})
 	if err != nil {
-		log.Printf("Could not start container [%s]: %v\n", resp.ID, err)
+		log.Printf("[Docker] Could not start container [%s]: %v\n", resp.ID, err)
 		return DockerResult{Error: err}
 	}
 
@@ -160,7 +167,7 @@ func (d *Docker) Run() DockerResult {
 }
 
 func (d *Docker) Stop(id string) DockerResult {
-	log.Printf("Stopping container [%s]", id)
+	log.Printf("[Docker] Stopping container [%s]", id)
 
 	ctx := context.Background()
 	err := d.Client.ContainerStop(ctx, id, container.StopOptions{}) // TODO configure timeout if required
@@ -175,9 +182,20 @@ func (d *Docker) Stop(id string) DockerResult {
 		Force:         false,
 	})
 	if err != nil {
-		log.Printf("Could not remove contianer [%s]: %v\n", id, err)
+		log.Printf("[Docker] Could not remove contianer [%s]: %v\n", id, err)
 		return DockerResult{Error: err}
 	}
 
 	return DockerResult{Action: "stop", Result: "success", Error: nil}
+}
+
+func (d *Docker) Inspect(id string) DockerInspectResponse {
+	ctx := context.Background()
+	response, err := d.Client.ContainerInspect(ctx, id)
+	if err != nil {
+		log.Printf("[Docker] Error inspecting container: %s\n", err)
+		return DockerInspectResponse{Error: err}
+	}
+
+	return DockerInspectResponse{ContainerData: &response}
 }
