@@ -60,6 +60,7 @@ type Config struct {
 	AttachStdout  bool
 	AttachStderr  bool
 	ExposedPorts  nat.PortSet
+	PortBindings  nat.PortMap
 	Cmd           []string
 	Image         string // Container image name
 	Cpu           float64
@@ -70,9 +71,21 @@ type Config struct {
 }
 
 func NewConfig(t *Task) *Config {
+	portMap := make(nat.PortMap)
+	for k, v := range t.PortBindings {
+		binding := nat.PortBinding{
+			HostIP:   "0.0.0.0",
+			HostPort: v,
+		}
+		port := nat.Port(k)
+
+		portMap[port] = append(portMap[port], binding)
+	}
+
 	return &Config{
 		Name:          t.Name,
 		ExposedPorts:  t.ExposedPorts,
+		PortBindings:  portMap,
 		Image:         t.Image,
 		Cpu:           t.Cpu,
 		Memory:        t.Memory,
@@ -139,9 +152,10 @@ func (d *Docker) Run() DockerResult {
 	}
 
 	hostConfig := container.HostConfig{
-		RestartPolicy:   restartPolicy,
-		Resources:       resources,
-		PublishAllPorts: true,
+		RestartPolicy: restartPolicy,
+		Resources:     resources,
+		PortBindings:  d.Config.PortBindings,
+		// PublishAllPorts: true,
 	}
 
 	resp, err := d.Client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, nil, d.Config.Name)
