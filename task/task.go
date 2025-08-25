@@ -33,7 +33,7 @@ type Task struct {
 	Name           string
 	State          State
 	Image          string // Docker image
-	HealthCheckUrl string
+	HealthCheckUrl string // Provided to Manager for direct health checks
 	RestartCount   int
 	Cpu            float64
 	Memory         int64

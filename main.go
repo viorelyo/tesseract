@@ -22,7 +22,7 @@ func main() {
 	// #region WorkerApi
 	fmt.Println("Starting tesseract worker.")
 	w := worker.Worker{
-		Queue: *queue.New(),
+		Queue: *queue.New(), // todo use concurrent-safe queue ?
 		Db:    make(map[uuid.UUID]*task.Task),
 	}
 	workerApi := worker.Api{
@@ -33,6 +33,7 @@ func main() {
 
 	go w.RunTasks()
 	go w.CollectStats()
+	go w.UpdateTasks()
 	go workerApi.Start()
 	// #endregion
 
@@ -49,6 +50,7 @@ func main() {
 
 	go mgr.ProcessTasks()
 	go mgr.UpdateTasks()
+	go mgr.PerformHealthChecks()
 	mgrApi.Start()
 	// #endregion
 

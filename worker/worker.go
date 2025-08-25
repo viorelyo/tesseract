@@ -118,7 +118,9 @@ func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
 }
 
 func (w *Worker) updateTasks() {
-	// todo add docs
+	// Worker checks its tasks to be running
+	// uses DockerApi.Inspect to check if each task is in running state
+	// if a task is not running, it is marked as failed
 
 	updateFailedTask := func(id uuid.UUID) {
 		w.Db[id].State = task.Failed
@@ -141,6 +143,7 @@ func (w *Worker) updateTasks() {
 				updateFailedTask(id)
 			}
 
+			// updating exposed hostPorts of the running task
 			w.Db[id].HostPorts = resp.ContainerData.NetworkSettings.NetworkSettingsBase.Ports
 		}
 	}

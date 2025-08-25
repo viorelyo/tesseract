@@ -104,6 +104,54 @@ func (m *Manager) updateTasks() {
 	}
 }
 
+func (m *Manager) scheduleTask(te task.TaskEvent, _worker string) (*task.Task, error) {
+	data, err := json.Marshal(te)
+	if err != nil {
+		errMsg := fmt.Sprintf("[Manager] Could not marshal task object: %v", te.Task)
+		log.Println(errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	url := fmt.Sprintf("http://%s/tasks", _worker)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		errMsg := fmt.Sprintf("[Manager] Could not connect to [%v]: %v", _worker, err)
+		log.Println(errMsg)
+
+		// retry later
+		m.Pending.Enqueue(te)
+
+		return nil, errors.New(errMsg)
+	}
+
+	d := json.NewDecoder(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		e := worker.ErrResponse{}
+		err := d.Decode(&e)
+		if err != nil {
+			errMsg := fmt.Sprintf("[Manager] Could not decode response: %s", err.Error())
+			log.Println(errMsg)
+			return nil, errors.New(errMsg)
+		}
+
+		errMsg := fmt.Sprintf("[Manager] Response error (%d): %s", e.HTTPStatusCode, e.Message)
+		log.Println(errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	t := new(task.Task)
+	err = d.Decode(t)
+	if err != nil {
+		errMsg := fmt.Sprintf("[Manager] Could not decode response: %s", err.Error())
+		log.Println(errMsg)
+		return nil, errors.New(errMsg)
+	}
+
+	log.Printf("[Manager] Task sent: %v\n", t)
+
+	return t, nil
+}
+
 func (m *Manager) SendWork() {
 	if m.Pending.Len() > 0 {
 		w := m.SelectWorker()
@@ -121,39 +169,13 @@ func (m *Manager) SendWork() {
 		t.State = task.Scheduled
 		m.TaskDb[t.ID] = &t
 
-		data, err := json.Marshal(te)
+		newTask, err := m.scheduleTask(te, w)
 		if err != nil {
-			log.Printf("[Manager] Could not marshal task object: %v\n", t)
-		}
-
-		// todo unindent
-		url := fmt.Sprintf("http://%s/tasks", w)
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
-		if err != nil {
-			log.Printf("[Manager] Could not connect to [%v]: %v\n", w, err)
-			m.Pending.Enqueue(te)
 			return
 		}
 
-		d := json.NewDecoder(resp.Body)
-		if resp.StatusCode != http.StatusCreated {
-			e := worker.ErrResponse{}
-			err := d.Decode(&e)
-			if err != nil {
-				log.Printf("[Manager] Could not decode response: %s\n", err.Error())
-				return
-			}
-			log.Printf("[Manager] Response error (%d): %s", e.HTTPStatusCode, e.Message)
-			return
-		}
-
-		t = task.Task{}
-		err = d.Decode(&t)
-		if err != nil {
-			log.Printf("[Manager] Could not decode response: %s\n", err.Error())
-			return
-		}
-		log.Printf("[Manager] Task sent: %v\n", t)
+		// update the task
+		t = *newTask
 	} else {
 		log.Println("[Manager] No work in the queue")
 	}
@@ -191,7 +213,8 @@ func (m *Manager) GetTasks() []*task.Task {
 }
 
 func (m *Manager) checkTaskHealth(t task.Task) error {
-	// todo docs
+	// Calls the health check directly on the task
+	// To find out the healthCheckUrl, it requires the address of the worker where task is running
 
 	getHostPort := func(ports nat.PortMap) *string {
 		for k, _ := range ports {
@@ -223,7 +246,8 @@ func (m *Manager) checkTaskHealth(t task.Task) error {
 }
 
 func (m *Manager) performHealthChecks() {
-	// todo docs
+	// Checking health on each running task
+	// Restarts up-to 3 times the failed tasks
 
 	for _, t := range m.GetTasks() {
 		if t.State == task.Running && t.RestartCount < 3 {
@@ -240,11 +264,13 @@ func (m *Manager) performHealthChecks() {
 }
 
 func (m *Manager) restartTask(t *task.Task) {
-	//todo docs
+	// Reschedules a task on the same worker
 
 	w := m.TaskWorkerMap[t.ID]
 	t.State = task.Scheduled
 	t.RestartCount++
+
+	// update the internal DB
 	m.TaskDb[t.ID] = t
 
 	te := task.TaskEvent{
@@ -253,39 +279,8 @@ func (m *Manager) restartTask(t *task.Task) {
 		Timestamp: time.Now(),
 		Task:      *t,
 	}
-	data, err := json.Marshal(te)
-	if err != nil {
-		log.Printf("[Manager] Could not marshal task object: %v\n", t)
-		return
-	}
 
-	// todo duplicated code
-	url := fmt.Sprintf("http://%s/tasks", w)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
-	if err != nil {
-		log.Printf("[Manager] Could not connect to [%v]: %v\n", w, err)
-		m.Pending.Enqueue(te)
-		return
-	}
-
-	d := json.NewDecoder(resp.Body)
-	if resp.StatusCode != http.StatusCreated {
-		e := worker.ErrResponse{}
-		err := d.Decode(&e)
-		if err != nil {
-			log.Printf("[Manager] Could not decode response: %s\n", err.Error())
-			return
-		}
-		log.Printf("[Manager] Response error (%d): %s", e.HTTPStatusCode, e.Message)
-		return
-	}
-
-	newTask := task.Task{}
-	err = d.Decode(&newTask)
-	if err != nil {
-		log.Printf("[Manager] Could not decode response: %s\n", err.Error())
-		return
-	}
+	_, _ = m.scheduleTask(te, w)
 }
 
 func (m *Manager) PerformHealthChecks() {
